@@ -152,12 +152,15 @@ async function goAllSendToTab(copies, prompt, row, deadline) {
   return { ...row, status: 'uncertain' };
 }
 
-async function runGoAll(rawSettings, retrySkipped = false) {
+async function runGoAll(rawSettings, retrySkipped = false, sourceBatchId) {
   const settings = goAllSettings(rawSettings);
   if (!settings.prompt.trim() || !settings.targets.length) throw new Error('Spara en GO-prompt och välj minst en chatt.');
   const [tabs, previous, fingerprint] = await Promise.all([
     goAllTabs(), goAllReceipts(), goAllFingerprint(settings.prompt),
   ]);
+  if (retrySkipped && previous.batch?.id !== sourceBatchId) {
+    throw new Error('Listan har ändrats. Uppdatera flikarna innan du fortsätter.');
+  }
   const skipIds = retrySkipped
     ? new Set((previous.batch?.rows || []).filter((row) => GO_ALL_SKIPPED.has(row.status)).map((row) => row.id))
     : null;
@@ -208,9 +211,10 @@ async function runGoAll(rawSettings, retrySkipped = false) {
   return batch;
 }
 
-async function clearGoAllUncertain() {
+async function clearGoAllUncertain(sourceBatchId) {
   const receipts = await goAllReceipts();
   const batch = receipts.batch;
+  if (batch?.id !== sourceBatchId) throw new Error('Kvittot har ändrats. Uppdatera listan och kontrollera det nya kvittot.');
   if (batch) batch.rows = batch.rows.map((row) => goAllUnknown(row) || row.status === 'review'
     ? { ...row, status: 'reviewed' }
     : row);
@@ -246,9 +250,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await goAllExclusively(() => chrome.storage.local.set({ [GO_ALL_CONFIG_KEY]: goAllSettings(message.settings) }));
         return {};
       case 'chatcmd-go-all-start':
-        return { batch: await goAllExclusively(() => runGoAll(message.settings, message.retrySkipped === true)) };
+        return {
+          batch: await goAllExclusively(() => runGoAll(message.settings, message.retrySkipped === true, message.sourceBatchId)),
+        };
       case 'chatcmd-go-all-clear-uncertain':
-        await goAllExclusively(clearGoAllUncertain);
+        await goAllExclusively(() => clearGoAllUncertain(message.sourceBatchId));
         return {};
       default: return {};
     }

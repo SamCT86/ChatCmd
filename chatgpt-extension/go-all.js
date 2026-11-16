@@ -150,7 +150,7 @@ save.addEventListener('click', () => void perform(async () => {
 function start(retrySkipped = false) {
   return perform(async () => {
     status.textContent = retrySkipped ? 'Skickar till återstående chattar…' : 'GO ALLA skickar till de valda chattarna…';
-    await request('start', { settings: settings(), retrySkipped });
+    await request('start', { settings: settings(), retrySkipped, sourceBatchId: batch?.id });
     await load();
   });
 }
@@ -159,7 +159,7 @@ retry.addEventListener('click', () => void start(true));
 clear.addEventListener('click', () => {
   if (!window.confirm('Kontrollera först i varje berörd chatt om GO redan finns där. Markera alla osäkra skick som kontrollerade?')) return;
   void perform(async () => {
-    await request('clear-uncertain');
+    await request('clear-uncertain', { sourceBatchId: batch?.id });
     await load();
     status.textContent = 'Osäkra skick markerade som kontrollerade.';
   });
