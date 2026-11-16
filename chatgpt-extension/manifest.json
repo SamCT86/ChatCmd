@@ -3,6 +3,7 @@
   "name": "ChatCMD ChatGPT Bridge",
   "version": "0.1.20",
   "description": "Bridges the local ChatCMD console to an already signed-in chatgpt.com tab.",
+  "action": { "default_title": "ChatCMD · GO ALLA", "default_popup": "go-all.html" },
   "permissions": ["tabs", "storage", "scripting", "alarms"],
   "host_permissions": ["https://chatgpt.com/*", "http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "background.js" },

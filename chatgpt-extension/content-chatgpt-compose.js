@@ -68,7 +68,112 @@ function create(deps) {
     findComposer()?.blur?.();
   }
 
-  return Object.freeze({ attachFiles, submitPrompt });
+  // GO ALLA never retries a click whose outcome is uncertain.
+  let oneShotBusy = false;
+
+  async function submitPromptOnce({ id, prompt, deadline }) {
+    if (oneShotBusy) return { status: 'busy' };
+    const blocked = () => {
+      if (!deps.isCurrent?.() || deps.conversationId?.() !== id) return 'changed';
+      if (findStopButton() || deps.hasActiveRequest?.()) return 'busy';
+      if (hasApprovalDialog()) return 'approval';
+      if (Date.now() >= deadline) return 'unavailable';
+      return null;
+    };
+    const initialBlock = blocked();
+    if (initialBlock) return { status: initialBlock };
+
+    const composer = findComposer();
+    if (!composer) return { status: 'unavailable' };
+    if (comparableComposerText(readComposerText(composer)) || hasDraftAttachment(composer)
+        || isEnabledSendButton(findSendButton(composer))) {
+      return { status: 'draft' };
+    }
+
+    let clicked = false;
+    let staged = false;
+    oneShotBusy = true;
+    try {
+      setComposerText(composer, prompt);
+      staged = true;
+      const prepared = await waitFor(() => {
+        const status = blocked();
+        if (status) return { status };
+        if (findComposer() !== composer || !composerTextMatches(composer, prompt) || hasDraftAttachment(composer)) {
+          return { status: 'draft' };
+        }
+        const button = findSendButton(composer);
+        return isEnabledSendButton(button) ? { button } : null;
+      }, Math.min(5_000, Math.max(0, deadline - Date.now())), 'GO ALLA: send control unavailable');
+      if (!prepared.button) return prepared;
+
+      const finalBlock = blocked();
+      if (finalBlock) return { status: finalBlock };
+      if (findComposer() !== composer || !composerTextMatches(composer, prompt) || hasDraftAttachment(composer)) {
+        return { status: 'draft' };
+      }
+      if (!isEnabledSendButton(prepared.button) || findSendButton(composer) !== prepared.button) {
+        return { status: 'unavailable' };
+      }
+
+      const previousMessage = lastUserMessageId();
+      clicked = true;
+      prepared.button.click();
+      return await waitFor(() => {
+        if (!deps.isCurrent?.() || deps.conversationId?.() !== id) return { status: 'uncertain' };
+        const messageId = lastUserMessageId();
+        const currentComposer = findComposer();
+        return messageId && messageId !== previousMessage
+          && (!currentComposer || !composerTextMatches(currentComposer, prompt))
+          ? { status: 'sent', messageId }
+          : null;
+      }, Math.max(0, deadline - Date.now()), 'GO ALLA: send acknowledgement unavailable');
+    } catch {
+      return { status: clicked ? 'uncertain' : 'unavailable' };
+    } finally {
+      try {
+        if (staged && !clicked && deps.isCurrent?.() && deps.conversationId?.() === id
+            && findComposer() === composer && composerTextMatches(composer, prompt)) {
+          setComposerText(composer, '');
+        }
+      } finally {
+        oneShotBusy = false;
+      }
+    }
+  }
+
+  function hasApprovalDialog() {
+    if (document.getElementById('chatcmd-global-approval-root')?.shadowRoot?.querySelector('[role="alertdialog"]')) {
+      return true;
+    }
+    return [...document.querySelectorAll('dialog[open], [aria-modal="true"]')]
+      .some((element) => element.getClientRects().length > 0);
+  }
+
+  function hasDraftAttachment(composer) {
+    const form = composer.closest('form');
+    if (!form) return false;
+    const previews = form.querySelector([
+      '[data-testid*="attachment-preview" i]', '[data-testid*="file-preview" i]',
+      '[data-testid*="remove-attachment" i]', '[data-testid*="remove-file" i]',
+      'img[src^="blob:"]', 'img[src^="data:image/"]',
+    ].join(','));
+    return Boolean(previews) || [...form.querySelectorAll('input[type="file"]')]
+      .some((input) => input.files?.length > 0);
+  }
+
+  function isEnabledSendButton(button) {
+    return Boolean(button?.isConnected && !button.disabled && button.getAttribute('aria-disabled') !== 'true');
+  }
+
+  function lastUserMessageId() {
+    return globalThis.ChatCmdTranscript?.latestUserMessageId?.() || null;
+  }
+
+  return Object.freeze({
+    attachFiles, submitPrompt, submitPromptOnce,
+    get oneShotBusy() { return oneShotBusy; },
+  });
 }
 
 function normalizeFileAttachments(rawAttachments) {

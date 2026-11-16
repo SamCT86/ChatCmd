@@ -8,7 +8,7 @@ const LOG_KEY = 'chatcmd-extension-logs';
 const MAX_LOGS = 200;
 const CHATGPT_HOME = 'https://chatgpt.com/';
 
-importScripts('background-io.js', 'background-tabs.js', 'approval-bridge.js', 'background-recovery.js', 'background-capture.js', 'background-clock.js', 'background-subagent-heartbeat.js', 'background-subagent-failure.js', 'compact-protocol.js', 'background-compact-destination.js', 'background-compact.js');
+importScripts('background-io.js', 'background-tabs.js', 'background-go-all.js', 'approval-bridge.js', 'background-recovery.js', 'background-capture.js', 'background-clock.js', 'background-subagent-heartbeat.js', 'background-subagent-failure.js', 'compact-protocol.js', 'background-compact-destination.js', 'background-compact.js');
 setTimeout(() => void recoverContentScriptsOnStartup(), 200);
 void reconcileOpenChatGptIdentities();
 

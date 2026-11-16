@@ -28,6 +28,24 @@ It is an unofficial browser UI integration, not the OpenAI API and not a replace
 
 For the complete MCP profile, public address, ChatGPT plugin, and extension workflow, read [Plugin and ChatGPT setup](../docs/PLUGIN_SETUP.md).
 
+## GO ALLA
+
+Open `edge://extensions/`, enable Developer mode and load the unpacked
+`chatgpt-extension` folder from this fork. Reload the existing ChatGPT tabs.
+Select the ChatCMD extension icon to open GO ALLA. Paste your full GO prompt,
+select the existing ChatGPT conversations and choose **Spara val**.
+Select **GO ALLA** to send the saved prompt once to each selected, ready chat
+in this browser profile. The popup sends directly through the signed-in Edge
+tabs. The same conversation opened in several windows is a single target.
+Clear a conversation's checkbox to pause it for the next batch.
+
+A busy, closed, sleeping or unready chat is skipped. Open approvals and
+unsent drafts also block a send. The popup shows a result for each target.
+If a Send click cannot be confirmed, check that chat for the new prompt
+before using **Jag har kontrollerat osäkra skick** to unblock it. GO ALLA
+receipts use the browser's posted user-message ID. Read each agent's report
+in its ChatGPT conversation.
+
 ## Permissions and trust model
 
 The manifest requests:

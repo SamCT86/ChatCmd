@@ -32,9 +32,20 @@ void globalThis.ChatCmdRuntime.sendMessage({ type: 'chatcmd-return-binding-statu
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!globalThis.ChatCmdRuntime.current(CONTENT_CONTEXT)) return false;
   if (message?.type === 'chatcmd-content-alive' && message.kind === 'chatgpt') { sendResponse({ ok: true, kind: 'chatgpt', captureProtocol: 2, compactProtocol: globalThis.ChatCmdCompact?.version, clockProtocol: globalThis.ChatCmdCaptureClock?.version, renderProtocol: globalThis.ChatCmdRenderBridge?.version, captureReady: Boolean(globalThis.ChatCmdCaptureClock && globalThis.ChatCmdObserver && globalThis.ChatCmdTranscript && globalThis.ChatCmdNativeCapture) }); return false; }
+  if (message?.type === 'chatcmd-go-all-dispatch') {
+    if (typeof message.id !== 'string' || typeof message.prompt !== 'string' || !message.prompt.trim()
+        || !Number.isFinite(message.deadline)) {
+      sendResponse({ status: 'unavailable' });
+      return false;
+    }
+    void composerBridge.submitPromptOnce(message)
+      .then(sendResponse)
+      .catch(() => sendResponse({ status: 'uncertain' }));
+    return true;
+  }
   if (message?.type === 'chatcmd-chatgpt-run') {
     const composer = findComposer();
-    if (!composer || findStopButton() || globalThis.ChatCmdCompact?.busy) {
+    if (!composer || findStopButton() || globalThis.ChatCmdCompact?.busy || composerBridge.oneShotBusy) {
       sendResponse({ ok: false, error: 'Tab ChatGPT chưa sẵn sàng nhận tin nhắn mới.' });
       return false;
     }
@@ -63,11 +74,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message?.type === 'chatcmd-chatgpt-ready') {
     const composer = findComposer();
-    const generating = Boolean(findStopButton());
+    const generating = Boolean(findStopButton() || composerBridge.oneShotBusy);
     sendResponse({
       ok: true,
       ready: Boolean(composer) && !generating,
       composerReady: Boolean(composer),
+      conversationId: currentConversationIdentity()?.conversationId,
+      goAllBusy: Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
       generating,
     });
     return false;
@@ -348,6 +361,9 @@ function setComposerText(composer, text) {
 }
 
 const composerBridge = globalThis.ChatCmdComposerBridge.create({
+  isCurrent: () => globalThis.ChatCmdRuntime.current(CONTENT_CONTEXT),
+  conversationId: () => currentConversationIdentity()?.conversationId,
+  hasActiveRequest: () => Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
   findComposer: (...args) => findComposer(...args),
   findSendButton: (...args) => findSendButton(...args),
   findStopButton: (...args) => findStopButton(...args),

@@ -30,15 +30,22 @@
     for (const char of text) hash = Math.imul(hash ^ char.codePointAt(0), 16777619);
     return (hash >>> 0).toString(16);
   }
-  function latestUser() {
+  function latestUserMetadata() {
     const users = [...document.querySelectorAll(USERS)]
       .filter((node) => !node.parentElement?.closest(USERS));
     const node = users.at(-1);
     if (!node) return null;
+    const messageId = node.getAttribute('data-message-id') || node.querySelector('[data-message-id]')?.getAttribute('data-message-id')
+      || node.getAttribute('data-chatgpt-search-message-ids')?.split(/\s+/)[0] || null;
+    return { node, messageId, index: users.length - 1 };
+  }
+  function latestUser() {
+    const metadata = latestUserMetadata();
+    if (!metadata) return null;
+    const { node, messageId, index } = metadata;
     const content = userText(node);
-    const id = node.getAttribute('data-message-id') || node.querySelector('[data-message-id]')?.getAttribute('data-message-id')
-      || node.getAttribute('data-chatgpt-search-message-ids')?.split(/\s+/)[0]
-      || 'dom-user:' + (node.getAttribute('data-turn-id') || node.getAttribute('data-testid') || users.length - 1) + ':' + fingerprint(content);
+    const id = messageId
+      || 'dom-user:' + (node.getAttribute('data-turn-id') || node.getAttribute('data-testid') || index) + ':' + fingerprint(content);
     return { node, id, text: normalize(content), content };
   }
   function hidden(node) {
@@ -104,5 +111,8 @@
           || node.closest('[data-chatgpt-search-unit-key]')?.getAttribute('data-chatgpt-search-message-ids')?.split(/\s+/)[0] || '' }))
       .filter((part) => part.content);
   }
-  globalThis.ChatCmdTranscript = Object.freeze({ latestUser, userText, readParts, normalize, conversationId });
+  globalThis.ChatCmdTranscript = Object.freeze({
+    latestUser, userText, readParts, normalize, conversationId,
+    latestUserMessageId: () => latestUserMetadata()?.messageId || null,
+  });
 })();

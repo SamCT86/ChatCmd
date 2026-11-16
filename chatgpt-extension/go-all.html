@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="sv">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatCMD · GO ALLA</title>
+<link rel="stylesheet" href="go-all.css">
+<main>
+  <h1>GO ALLA</h1>
+  <label for="prompt">GO-prompt</label>
+  <textarea id="prompt" rows="5" spellcheck="false" placeholder="Klistra in din fullständiga GO-prompt."></textarea>
+  <div class="section-heading">
+    <h2>ChatGPT-chattar</h2>
+    <button type="button" id="refresh">Uppdatera flikar</button>
+  </div>
+  <p id="empty" hidden>Öppna dina befintliga ChatGPT-chattar i den här Edge-profilen och uppdatera listan.</p>
+  <ul id="chats" aria-label="Valda och öppna chattar"></ul>
+  <div class="actions">
+    <button type="button" id="save">Spara val</button>
+    <button type="button" id="run" class="primary">GO ALLA</button>
+  </div>
+  <p id="status" role="status" aria-live="polite"></p>
+  <button type="button" id="clear-uncertain" hidden>Jag har kontrollerat osäkra skick</button>
+</main>
+<script src="go-all.js" defer></script>
