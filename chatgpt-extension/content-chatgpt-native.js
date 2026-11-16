@@ -9,8 +9,11 @@
   const cancel = (id) => clock ? clock.cancel(id) : clearTimeout(id);
   const USER_SELECTOR = '[data-message-author-role="user"],[data-turn="user"],[data-chatgpt-search-unit-key$=":user"]';
   const NATIVE_FALLBACK_POLL_MS = 4_000;
+  const DESKTOP_BRIDGE_KEY = 'chatcmd-approval-base-url';
   const seen = new Set();
   let stopped = false;
+  let enabled = false;
+  let modeRevision = 0;
   let pending = false;
   let retryAt = 0;
   let queued = false;
@@ -18,7 +21,7 @@
   let retryTimer;
   let lastDiagnostic = '';
   function report(state, detail = '') {
-    if (!controller?.current()) return;
+    if (!enabled || !controller?.current()) return;
     document.documentElement.dataset.chatcmdCaptureState = state;
     document.documentElement.dataset.chatcmdCaptureError = detail;
     const diagnostic = `${state}:${detail}`;
@@ -36,6 +39,7 @@
   }
   async function tick() {
     if (stopped || !controller?.current()) { stop(); return; }
+    if (!enabled) return;
     const user = dom.latestUser();
     const key = keyFor(user);
     if (!key || !user.content.trim()) return;
@@ -51,29 +55,31 @@
       const response = await globalThis.ChatCmdRuntime.sendMessage({ type: 'chatcmd-chatgpt-native-turn',
         conversationId: dom.conversationId(), conversationUrl: location.href,
         userMessageId: user.id, content: user.content });
-      if (stopped || !controller.current() || keyFor(dom.latestUser()) !== key || controller.active) return;
+      if (!enabled || stopped || !controller.current() || keyFor(dom.latestUser()) !== key || controller.active) return;
       if (response?.ok && response.ignored) { remember(key); return; }
       if (!response?.ok || !response.request) throw new Error(response?.error || 'ChatCMD did not acknowledge the browser turn.');
       report('recording');
       remember(key);
       if (response.request.status === 'completed' && response.request.hasFinalResponse && !response.chatCmdTurn) return;
       void controller.adopt(response.request, user).then(() => {
-        if (stopped || !controller.current()) return;
+        if (!enabled || stopped || !controller.current()) return;
         if (keyFor(dom.latestUser()) === key && document.documentElement.dataset.chatcmdCaptureState === 'error') {
           seen.delete(key); retryAt = Date.now() + 5000; retry(5000);
         }
         schedule();
       });
     } catch (error) {
+      if (globalThis.ChatCmdRuntime.invalidated(error)) { stop(); return; }
+      if (!enabled || stopped) return;
       retryAt = Date.now() + 5000;
       report('error', String(error?.message || error));
       if (!stopped) retry(5000);
     } finally { pending = false; }
   }
   function schedule() {
-    if (queued || stopped) return;
+    if (queued || stopped || !enabled) return;
     queued = true;
-    void Promise.resolve().then(() => { queued = false; if (!stopped) void tick(); });
+    void Promise.resolve().then(() => { queued = false; if (enabled && !stopped) void tick(); });
   }
   function mutationAffectsUser(records) {
     for (const record of records) {
@@ -87,22 +93,43 @@
     return false;
   }
   const observer = new MutationObserver((records) => { if (mutationAffectsUser(records)) schedule(); });
-  observer.observe(document.body, { subtree: true, childList: true, characterData: true });
   function poll() {
-    if (stopped) return;
+    if (stopped || !enabled) return;
     void tick();
-    // Idle polling is a low-frequency local fallback, never a perpetual service-worker keepalive.
+    // Idle polling is a low-frequency local fallback.
     pollTimer = later(poll, NATIVE_FALLBACK_POLL_MS, { background: false });
   }
-  function stop() {
-    if (stopped) return;
-    stopped = true; observer.disconnect(); cancel(pollTimer); cancel(retryTimer);
+  function setEnabled(next) {
+    if (enabled === next) return;
+    enabled = next;
+    if (enabled) {
+      observer.observe(document.body, { subtree: true, childList: true, characterData: true });
+      document.addEventListener('visibilitychange', schedule);
+      window.addEventListener('pageshow', schedule);
+      pollTimer = later(poll, NATIVE_FALLBACK_POLL_MS, { background: false });
+      void Promise.resolve(globalThis.ChatCmdResumeReady).then(() => schedule());
+      return;
+    }
+    observer.disconnect();
+    cancel(pollTimer);
+    cancel(retryTimer);
     document.removeEventListener('visibilitychange', schedule);
     window.removeEventListener('pageshow', schedule);
   }
-  document.addEventListener('visibilitychange', schedule);
-  window.addEventListener('pageshow', schedule);
-  pollTimer = later(poll, NATIVE_FALLBACK_POLL_MS, { background: false });
+  function applyDesktopMode(changes, area) {
+    if (stopped || area !== 'local' || !changes[DESKTOP_BRIDGE_KEY]) return;
+    modeRevision += 1;
+    setEnabled(Boolean(changes[DESKTOP_BRIDGE_KEY].newValue));
+  }
+  function stop() {
+    if (stopped) return;
+    stopped = true;
+    setEnabled(false);
+    try { chrome.storage.onChanged.removeListener(applyDesktopMode); } catch { /* disposed context */ }
+  }
   globalThis.ChatCmdNativeCapture = Object.freeze({ stop, tick, schedule });
-  Promise.resolve(globalThis.ChatCmdResumeReady).then(() => void tick());
+  chrome.storage.onChanged.addListener(applyDesktopMode);
+  void chrome.storage.local.get(DESKTOP_BRIDGE_KEY).then((stored) => {
+    if (!stopped && modeRevision === 0) setEnabled(Boolean(stored[DESKTOP_BRIDGE_KEY]));
+  }).catch(() => stop());
 })();

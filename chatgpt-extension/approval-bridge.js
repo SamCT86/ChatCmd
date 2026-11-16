@@ -7,20 +7,22 @@ let approvalReconnectTimer = null;
 let approvalReconnectAttempt = 0;
 let approvalConnectionGeneration = 0;
 let approvalSoundEnabled = true;
+let approvalBridgeEnabled = false;
 
 async function startApprovalBridge() {
   const stored = await chrome.storage.local.get(APPROVAL_BASE_URL_KEY);
   const configured = stored[APPROVAL_BASE_URL_KEY];
-  if (configured) {
-    try { approvalBaseUrl = localOrigin(configured); } catch { /* use default */ }
-  }
+  if (!configured || approvalBridgeEnabled) return;
+  try { approvalBaseUrl = localOrigin(configured); } catch { return; }
+  approvalBridgeEnabled = true;
   connectApprovalSocket();
 }
 
 async function configureApprovalBridge(value) {
   if (!value) return;
   const next = localOrigin(value);
-  if (next === approvalBaseUrl) return;
+  if (approvalBridgeEnabled && next === approvalBaseUrl) return;
+  approvalBridgeEnabled = true;
   approvalBaseUrl = next;
   await chrome.storage.local.set({ [APPROVAL_BASE_URL_KEY]: next });
   approvalConnectionGeneration += 1;
@@ -33,6 +35,7 @@ async function configureApprovalBridge(value) {
 }
 
 function connectApprovalSocket() {
+  if (!approvalBridgeEnabled) return;
   const generation = approvalConnectionGeneration;
   let socket;
   try {
@@ -78,7 +81,7 @@ function connectApprovalSocket() {
 }
 
 function scheduleApprovalReconnect(generation) {
-  if (generation !== approvalConnectionGeneration || approvalReconnectTimer) return;
+  if (!approvalBridgeEnabled || generation !== approvalConnectionGeneration || approvalReconnectTimer) return;
   const delayMs = Math.min(30_000, 500 * (2 ** approvalReconnectAttempt++));
   approvalReconnectTimer = setTimeout(() => {
     approvalReconnectTimer = null;
@@ -244,4 +247,4 @@ function conversationApprovalKey(taskId) { return `conversation:${taskId}`; }
 function activityApprovalKey(taskId, activityId) { return `activity:${taskId}:${activityId}`; }
 function planQuestionKey(questionId) { return `plan:${questionId}`; }
 
-void startApprovalBridge();
+const approvalBridgeStartup = startApprovalBridge().catch(() => {});

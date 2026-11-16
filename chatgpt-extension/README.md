@@ -36,7 +36,9 @@ Select the ChatCMD extension icon to open GO ALLA. Paste your full GO prompt,
 select the existing ChatGPT conversations and choose **Spara val**.
 Select **GO ALLA** to send the saved prompt once to each selected, ready chat
 in this browser profile. The popup sends directly through the signed-in Edge
-tabs. The same conversation opened in several windows is a single target.
+tabs. Opening the ChatCMD desktop console with this extension enables its
+separate capture and approval bridge. The same conversation opened in several
+windows is a single target.
 Clear a conversation's checkbox to pause it for the next batch.
 
 A busy, closed, sleeping or unready chat is skipped. Open approvals and

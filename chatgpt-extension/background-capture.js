@@ -2,6 +2,8 @@
 // No task, agent, permission or localBaseUrl supplied by a ChatGPT page is trusted.
 const captureCapabilities = new Map();
 async function handleNativeTurn(message, sender) {
+  await approvalBridgeStartup;
+  if (!approvalBridgeEnabled) return { ignored: true };
   const tabId = sender.tab?.id;
   if (!tabId || (sender.frameId !== undefined && sender.frameId !== 0)) throw new Error('Native capture requires the top-level ChatGPT tab.');
   const tab = await safeTab(tabId);

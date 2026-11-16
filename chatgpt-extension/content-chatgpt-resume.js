@@ -10,7 +10,11 @@
       if (!checkpoint?.userId || checkpoint.conversationId !== globalThis.ChatCmdTranscript.conversationId()
         || checkpoint.userId !== globalThis.ChatCmdTranscript.latestUser()?.id) return;
       void controller.adopt(response.request);
-    } catch (error) { globalThis.ChatCmdCaptureStatus?.report('error', String(error?.message || error)); }
+    } catch (error) {
+      if (!globalThis.ChatCmdRuntime.invalidated(error)) {
+        globalThis.ChatCmdCaptureStatus?.report('error', String(error?.message || error));
+      }
+    }
   }
   globalThis.ChatCmdResumeReady = resume();
 })();
