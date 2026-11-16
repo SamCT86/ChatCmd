@@ -79,6 +79,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       ok: true,
       ready: Boolean(composer) && !generating,
       composerReady: Boolean(composer),
+      goAllProtocol: 1,
       conversationId: currentConversationIdentity()?.conversationId,
       goAllBusy: Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
       generating,

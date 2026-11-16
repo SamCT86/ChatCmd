@@ -84,7 +84,7 @@ function create(deps) {
     if (initialBlock) return { status: initialBlock };
 
     const composer = findComposer();
-    if (!isMainComposer(composer)) return { status: 'unavailable' };
+    if (!isMainComposer(composer)) return { status: 'unavailable', detail: 'composer' };
     if (hasInlineEdit() || comparableComposerText(readComposerText(composer)) || hasDraftAttachment(composer)
         || isEnabledSendButton(findSendButton(composer))) {
       return { status: 'draft' };
@@ -115,7 +115,7 @@ function create(deps) {
         return { status: 'draft' };
       }
       if (!isComposerSendButton(composer, prepared.button) || findSendButton(composer) !== prepared.button) {
-        return { status: 'unavailable' };
+        return { status: 'unavailable', detail: 'send_control' };
       }
 
       const previousMessage = lastUserMessageId();
@@ -131,7 +131,7 @@ function create(deps) {
           : null;
       }, Math.max(0, deadline - Date.now()), 'GO ALLA: send acknowledgement unavailable');
     } catch {
-      return { status: clicked ? 'uncertain' : 'unavailable' };
+      return clicked ? { status: 'uncertain' } : { status: 'unavailable', detail: 'send_control' };
     } finally {
       try {
         if (staged && !clicked && deps.isCurrent?.() && deps.conversationId?.() === id

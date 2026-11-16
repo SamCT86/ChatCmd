@@ -105,30 +105,51 @@ function goAllMergeUncertain(...groups) {
   return [...entries.values()];
 }
 
-async function goAllProbeDuplicate(tab, id) {
-  if (goAllSleeping(tab)) return 'unavailable';
+function goAllProbeTab(tab) {
+  return chrome.tabs.sendMessage(tab.id, { type: 'chatcmd-chatgpt-ready' }, { frameId: 0 });
+}
+
+async function goAllPrepareTab(tab, id, deadline) {
+  if (goAllSleeping(tab)) return { status: 'unavailable', detail: 'sleeping' };
   let timer;
+  const prepare = async () => {
+    let reply;
+    try {
+      reply = await goAllProbeTab(tab);
+    } catch (error) {
+      if (!isMissingReceiverError(error)) return { status: 'unavailable', detail: 'bridge' };
+      const current = await safeTab(tab.id);
+      if (!current || goAllConversationId(current.url) !== id) return { status: 'changed' };
+      if (goAllSleeping(current)) return { status: 'unavailable', detail: 'sleeping' };
+      if (Date.now() >= deadline) return { status: 'unavailable', detail: 'timeout' };
+      await injectChatGptScripts(tab.id);
+      reply = await goAllProbeTab(tab);
+    }
+    if (reply?.goAllProtocol !== 1) return { status: 'unavailable', detail: 'bridge' };
+    if (reply.conversationId !== id) return { status: 'changed' };
+    if (reply.generating || reply.goAllBusy) return { status: 'busy' };
+    return reply.composerReady ? { status: 'ready' } : { status: 'unavailable', detail: 'composer' };
+  };
   try {
-    const reply = await Promise.race([
-      chrome.tabs.sendMessage(tab.id, { type: 'chatcmd-chatgpt-ready' }, { frameId: 0 }),
-      new Promise((resolve) => { timer = setTimeout(() => resolve(null), 2_000); }),
+    return await Promise.race([
+      prepare(),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve({ status: 'unavailable', detail: 'timeout' }),
+          Math.min(4_000, Math.max(0, deadline - Date.now())));
+      }),
     ]);
-    if (reply?.conversationId !== id) return 'unavailable';
-    if (reply.generating || reply.goAllBusy) return 'busy';
-    return reply.composerReady ? 'ready' : 'unavailable';
   } catch {
-    return 'unavailable';
+    return { status: 'unavailable', detail: 'bridge' };
   } finally {
     clearTimeout(timer);
   }
 }
 
 async function goAllSendToTab(copies, prompt, row, deadline) {
-  if (copies.length > 1) {
-    const probes = await Promise.all(copies.map((tab) => goAllProbeDuplicate(tab, row.id)));
-    if (probes.includes('busy')) return { ...row, status: 'busy' };
-    if (probes.includes('unavailable')) return { ...row, status: 'unavailable' };
-  }
+  const probes = await Promise.all(copies.map((tab) => goAllPrepareTab(tab, row.id, deadline)));
+  const blocked = probes.find((probe) => probe.status === 'busy')
+    || probes.find((probe) => probe.status !== 'ready');
+  if (blocked) return { ...row, ...blocked };
   const [tab] = copies;
   let timer;
   try {
@@ -141,10 +162,11 @@ async function goAllSendToTab(copies, prompt, row, deadline) {
       }),
     ]);
     if (reply && GO_ALL_RESULTS.has(reply.status)) {
-      return { ...row, status: reply.status, messageId: typeof reply.messageId === 'string' ? reply.messageId : undefined };
+      return { ...row, status: reply.status, detail: reply.detail,
+        messageId: typeof reply.messageId === 'string' ? reply.messageId : undefined };
     }
   } catch (error) {
-    if (isMissingReceiverError(error)) return { ...row, status: 'unavailable' };
+    if (isMissingReceiverError(error)) return { ...row, status: 'unavailable', detail: 'bridge' };
   } finally {
     clearTimeout(timer);
   }
@@ -189,7 +211,7 @@ async function runGoAll(rawSettings, retrySkipped = false, sourceBatchId) {
     else if (justSent.has(id)) status = 'recent';
     else if (!tab) status = 'closed';
     else if (goAllSleeping(tab)) status = 'unavailable';
-    return { id, title: tab?.title || title, status };
+    return { id, title: tab?.title || title, status, detail: status === 'unavailable' ? 'sleeping' : undefined };
   });
   const batch = { id: crypto.randomUUID(), startedAt: Date.now(), fingerprint, rows };
   // Persist the intent first. A worker/browser restart leaves unsafely retriable targets fenced.

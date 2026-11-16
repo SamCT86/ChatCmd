@@ -23,6 +23,14 @@ const labels = {
   recent: 'Samma GO skickades nyss',
 };
 
+const unavailableDetails = {
+  sleeping: 'Fliken vilar. Öppna den och försök igen.',
+  bridge: 'Tillägget når inte fliken. Ladda om chatten.',
+  composer: 'ChatGPTs skrivfält hittades inte. Öppna chatten och kontrollera att skrivfältet syns.',
+  send_control: 'Skicka-knappen blev inte redo. Öppna chatten och kontrollera skrivfältet.',
+  timeout: 'Fliken svarade för långsamt. Öppna den och försök igen.',
+};
+
 let tabs = [];
 let chosen = new Map();
 let batch = null;
@@ -91,7 +99,7 @@ function render() {
     const note = document.createElement('small');
     if (receipt?.status === 'pending' && running) note.textContent = 'Skickar…';
     else if (uncertainIds.has(id)) note.textContent = labels.uncertain;
-    else if (receipt) note.textContent = labels[receipt.status];
+    else if (receipt) note.textContent = unavailableDetails[receipt.detail] || labels[receipt.status];
     else if (!tab) note.textContent = labels.closed;
     else if (tab.sleeping) note.textContent = 'Vilande flik';
     if (receipt?.status === 'sent') note.dataset.sent = 'true';
