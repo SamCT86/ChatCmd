@@ -5,6 +5,7 @@ const status = document.getElementById('status');
 const refresh = document.getElementById('refresh');
 const save = document.getElementById('save');
 const run = document.getElementById('run');
+const retry = document.getElementById('retry-skipped');
 const clear = document.getElementById('clear-uncertain');
 
 const labels = {
@@ -19,6 +20,7 @@ const labels = {
   uncertain: 'Okänt om GO skickades. Kontrollera chatten.',
   review: 'Pausad tills du kontrollerat föregående skick',
   reviewed: 'Kontrollerad manuellt',
+  recent: 'Samma GO skickades nyss',
 };
 
 let tabs = [];
@@ -27,6 +29,7 @@ let batch = null;
 let uncertain = [];
 let running = false;
 let working = true;
+let retryableIds = new Set();
 
 function settings() {
   return { prompt: promptInput.value, targets: [...chosen.values()] };
@@ -44,8 +47,10 @@ function updateActions() {
   promptInput.disabled = locked;
   save.disabled = locked;
   run.disabled = locked || !chosen.size || !promptInput.value.trim();
+  retry.hidden = ![...retryableIds].some((id) => chosen.has(id));
+  retry.disabled = run.disabled;
   clear.disabled = locked;
-  for (const input of chatList.querySelectorAll('input')) input.disabled = locked;
+  for (const control of chatList.querySelectorAll('input, button')) control.disabled = locked;
 }
 
 function render() {
@@ -71,7 +76,18 @@ function render() {
       updateActions();
     });
     label.append(checkbox, document.createTextNode(title));
-    item.append(label);
+    const row = document.createElement('div');
+    row.className = 'chat-row';
+    row.append(label);
+    if (tab) {
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.textContent = 'Öppna';
+      open.setAttribute('aria-label', 'Öppna ' + title);
+      open.addEventListener('click', () => void perform(() => request('focus', { id })));
+      row.append(open);
+    }
+    item.append(row);
     const note = document.createElement('small');
     if (receipt?.status === 'pending' && running) note.textContent = 'Skickar…';
     else if (uncertainIds.has(id)) note.textContent = labels.uncertain;
@@ -103,6 +119,7 @@ async function load({ restore = false } = {}) {
   tabs = snapshot.tabs;
   batch = snapshot.batch;
   uncertain = snapshot.uncertain;
+  retryableIds = new Set(snapshot.retryableIds);
   running = snapshot.running;
   if (restore) {
     promptInput.value = snapshot.settings.prompt;
@@ -130,11 +147,15 @@ save.addEventListener('click', () => void perform(async () => {
   await request('save', { settings: settings() });
   status.textContent = 'Prompt och chattar sparade.';
 }));
-run.addEventListener('click', () => void perform(async () => {
-  status.textContent = 'GO ALLA skickar till de valda chattarna…';
-  await request('start', { settings: settings() });
-  await load();
-}));
+function start(retrySkipped = false) {
+  return perform(async () => {
+    status.textContent = retrySkipped ? 'Skickar till återstående chattar…' : 'GO ALLA skickar till de valda chattarna…';
+    await request('start', { settings: settings(), retrySkipped });
+    await load();
+  });
+}
+run.addEventListener('click', () => void start());
+retry.addEventListener('click', () => void start(true));
 clear.addEventListener('click', () => {
   if (!window.confirm('Kontrollera först i varje berörd chatt om GO redan finns där. Markera alla osäkra skick som kontrollerade?')) return;
   void perform(async () => {

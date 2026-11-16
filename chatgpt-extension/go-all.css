@@ -50,6 +50,8 @@ li {
   border-bottom: 1px solid color-mix(in srgb, CanvasText 16%, Canvas);
 }
 li label { display: flex; gap: 7px; align-items: center; overflow-wrap: anywhere; }
+.chat-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.chat-row button { min-height: 26px; font-size: .83rem; flex-shrink: 0; }
 li small { display: block; margin: 2px 0 0 24px; color: GrayText; }
 li small[data-sent="true"] { color: light-dark(#176b48, #75dfaf); }
 p { margin: 8px 0; }

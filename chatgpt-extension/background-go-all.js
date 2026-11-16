@@ -6,6 +6,7 @@ const GO_ALL_POPUP_URL = chrome.runtime.getURL('go-all.html');
 const GO_ALL_SEND_WINDOW_MS = 10_000;
 let goAllOperation = null;
 
+const GO_ALL_SKIPPED = new Set(['busy', 'draft', 'approval', 'closed', 'unavailable', 'changed']);
 const GO_ALL_RESULTS = new Set([
   'sent', 'busy', 'draft', 'approval', 'unavailable', 'changed', 'uncertain',
 ]);
@@ -64,6 +65,7 @@ async function goAllSnapshot() {
     tabs: [...tabs].map(([id, [tab]]) => ({ id, title: tab.title || 'ChatGPT', sleeping: goAllSleeping(tab) })),
     batch: receipts.batch,
     uncertain: receipts.uncertain,
+    retryableIds: (receipts.batch?.rows || []).filter((row) => GO_ALL_SKIPPED.has(row.status)).map((row) => row.id),
   };
 }
 
@@ -150,29 +152,40 @@ async function goAllSendToTab(copies, prompt, row, deadline) {
   return { ...row, status: 'uncertain' };
 }
 
-async function runGoAll(rawSettings) {
+async function runGoAll(rawSettings, retrySkipped = false) {
   const settings = goAllSettings(rawSettings);
   if (!settings.prompt.trim() || !settings.targets.length) throw new Error('Spara en GO-prompt och välj minst en chatt.');
   const [tabs, previous, fingerprint] = await Promise.all([
     goAllTabs(), goAllReceipts(), goAllFingerprint(settings.prompt),
   ]);
+  const skipIds = retrySkipped
+    ? new Set((previous.batch?.rows || []).filter((row) => GO_ALL_SKIPPED.has(row.status)).map((row) => row.id))
+    : null;
+  const targets = skipIds ? settings.targets.filter((target) => skipIds.has(target.id)) : settings.targets;
+  if (!targets.length) throw new Error('Inga valda chattar återstår att skicka till.');
   const previousTargets = new Set(previous.batch?.rows.map((row) => row.id) || []);
   if (previous.batch?.fingerprint === fingerprint
       && Date.now() - previous.batch.startedAt < 3_000
-      && previousTargets.size === settings.targets.length
-      && settings.targets.every((target) => previousTargets.has(target.id))) return previous.batch;
+      && previousTargets.size === targets.length
+      && targets.every((target) => previousTargets.has(target.id)) && !retrySkipped) return previous.batch;
 
   const interrupted = (previous.batch?.rows || []).filter(goAllUnknown)
     .map((row) => ({ ...row, fingerprint: previous.batch.fingerprint }));
   const uncertain = goAllMergeUncertain(previous.uncertain, interrupted);
   const uncertainIds = new Set(uncertain.map((row) => row.id));
-  const rows = settings.targets.map(({ id, title }) => {
+  const recentTurns = previous.recentTurns || [];
+  const justSent = new Set(recentTurns.filter((row) =>
+    row.fingerprint === fingerprint && Date.now() - row.sentAt < 3_000).map((row) => row.id));
+  const rows = targets.map(({ id, title }) => {
     const tab = tabs.get(id)?.[0];
-    const status = uncertainIds.has(id) ? 'review' : !tab ? 'closed' : goAllSleeping(tab) ? 'unavailable' : 'pending';
+    let status = 'pending';
+    if (uncertainIds.has(id)) status = 'review';
+    else if (justSent.has(id)) status = 'recent';
+    else if (!tab) status = 'closed';
+    else if (goAllSleeping(tab)) status = 'unavailable';
     return { id, title: tab?.title || title, status };
   });
   const batch = { id: crypto.randomUUID(), startedAt: Date.now(), fingerprint, rows };
-  const recentTurns = previous.recentTurns || [];
   // Persist the intent first. A worker/browser restart leaves unsafely retriable targets fenced.
   await chrome.storage.local.set({
     [GO_ALL_CONFIG_KEY]: settings,
@@ -184,7 +197,7 @@ async function runGoAll(rawSettings) {
     : row));
   batch.finishedAt = Date.now();
   const sent = batch.rows.filter((row) => row.status === 'sent')
-    .map((row) => ({ id: row.id, status: 'sent', messageId: row.messageId, fingerprint }));
+    .map((row) => ({ id: row.id, status: 'sent', messageId: row.messageId, fingerprint, sentAt: batch.finishedAt }));
   await chrome.storage.local.set({
     [GO_ALL_RECEIPTS_KEY]: {
       batch,
@@ -204,6 +217,16 @@ async function clearGoAllUncertain() {
   await chrome.storage.local.set({ [GO_ALL_RECEIPTS_KEY]: { ...receipts, batch, uncertain: [] } });
 }
 
+async function focusGoAllChat(id) {
+  const tabs = await goAllTabs();
+  const tab = tabs.get(id)?.[0];
+  if (!tab) throw new Error('ChatGPT-fliken är stängd.');
+  const current = await chrome.tabs.get(tab.id);
+  if (goAllConversationId(current.url) !== id) throw new Error('Fliken bytte konversation.');
+  const active = await chrome.tabs.update(current.id, { active: true });
+  await chrome.windows.update(active.windowId, { focused: true });
+}
+
 function goAllExclusively(operation) {
   if (goAllOperation) throw new Error('En GO ALLA-åtgärd pågår redan.');
   goAllOperation = Promise.resolve().then(operation).finally(() => { goAllOperation = null; });
@@ -212,14 +235,18 @@ function goAllExclusively(operation) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.url !== GO_ALL_POPUP_URL
-      || !['chatcmd-go-all-list', 'chatcmd-go-all-save', 'chatcmd-go-all-start', 'chatcmd-go-all-clear-uncertain'].includes(message?.type)) return false;
+      || !message?.type?.startsWith('chatcmd-go-all-')) return false;
   const reply = async () => {
     switch (message?.type) {
       case 'chatcmd-go-all-list': return await goAllSnapshot();
+      case 'chatcmd-go-all-focus':
+        await focusGoAllChat(message.id);
+        return {};
       case 'chatcmd-go-all-save':
         await goAllExclusively(() => chrome.storage.local.set({ [GO_ALL_CONFIG_KEY]: goAllSettings(message.settings) }));
         return {};
-      case 'chatcmd-go-all-start': return { batch: await goAllExclusively(() => runGoAll(message.settings)) };
+      case 'chatcmd-go-all-start':
+        return { batch: await goAllExclusively(() => runGoAll(message.settings, message.retrySkipped === true)) };
       case 'chatcmd-go-all-clear-uncertain':
         await goAllExclusively(clearGoAllUncertain);
         return {};

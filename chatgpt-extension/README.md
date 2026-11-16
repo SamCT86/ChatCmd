@@ -41,8 +41,9 @@ Clear a conversation's checkbox to pause it for the next batch.
 
 A busy, closed, sleeping or unready chat is skipped. Open approvals and
 unsent drafts also block a send. The popup shows a result for each target.
-If a Send click cannot be confirmed, check that chat for the new prompt
-before using **Jag har kontrollerat osäkra skick** to unblock it. GO ALLA
+Select **Starta återstående** to try the selected, skipped chats again.
+If a Send click cannot be confirmed, use **Öppna** on that row and check for
+the new prompt before using **Jag har kontrollerat osäkra skick**. GO ALLA
 receipts use the browser's posted user-message ID. Read each agent's report
 in its ChatGPT conversation.
 
