@@ -84,8 +84,8 @@ function create(deps) {
     if (initialBlock) return { status: initialBlock };
 
     const composer = findComposer();
-    if (!composer) return { status: 'unavailable' };
-    if (comparableComposerText(readComposerText(composer)) || hasDraftAttachment(composer)
+    if (!isMainComposer(composer)) return { status: 'unavailable' };
+    if (hasInlineEdit() || comparableComposerText(readComposerText(composer)) || hasDraftAttachment(composer)
         || isEnabledSendButton(findSendButton(composer))) {
       return { status: 'draft' };
     }
@@ -99,20 +99,22 @@ function create(deps) {
       const prepared = await waitFor(() => {
         const status = blocked();
         if (status) return { status };
-        if (findComposer() !== composer || !composerTextMatches(composer, prompt) || hasDraftAttachment(composer)) {
+        if (findComposer() !== composer || hasInlineEdit() || !composerTextMatches(composer, prompt)
+            || hasDraftAttachment(composer)) {
           return { status: 'draft' };
         }
         const button = findSendButton(composer);
-        return isEnabledSendButton(button) ? { button } : null;
+        return isComposerSendButton(composer, button) ? { button } : null;
       }, Math.min(5_000, Math.max(0, deadline - Date.now())), 'GO ALLA: send control unavailable');
       if (!prepared.button) return prepared;
 
       const finalBlock = blocked();
       if (finalBlock) return { status: finalBlock };
-      if (findComposer() !== composer || !composerTextMatches(composer, prompt) || hasDraftAttachment(composer)) {
+      if (findComposer() !== composer || hasInlineEdit() || !composerTextMatches(composer, prompt)
+          || hasDraftAttachment(composer)) {
         return { status: 'draft' };
       }
-      if (!isEnabledSendButton(prepared.button) || findSendButton(composer) !== prepared.button) {
+      if (!isComposerSendButton(composer, prepared.button) || findSendButton(composer) !== prepared.button) {
         return { status: 'unavailable' };
       }
 
@@ -148,6 +150,27 @@ function create(deps) {
     }
     return [...document.querySelectorAll('dialog[open], [aria-modal="true"]')]
       .some((element) => element.getClientRects().length > 0);
+  }
+
+  function isMainComposer(composer) {
+    return Boolean(composer?.matches('#prompt-textarea, [data-testid="prompt-textarea"], textarea[name="prompt-textarea"]')
+      || composer?.closest('[data-type="unified-composer"], form[data-testid="composer-form"]'));
+  }
+
+  function hasInlineEdit() {
+    const editors = document.querySelectorAll(
+      '[data-message-author-role="user"] textarea, [data-turn="user"] textarea,'
+      + ' [data-message-author-role="user"] [contenteditable="true"], [data-turn="user"] [contenteditable="true"]',
+    );
+    return [...editors].some((editor) => editor.getClientRects().length > 0);
+  }
+
+  function isComposerSendButton(composer, button) {
+    if (!isEnabledSendButton(button)) return false;
+    const composerForm = composer.closest('form');
+    const buttonForm = button.form || button.closest('form');
+    if (composerForm && buttonForm) return composerForm === buttonForm;
+    return button.getAttribute('data-testid') === 'send-button';
   }
 
   function hasDraftAttachment(composer) {

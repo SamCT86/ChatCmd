@@ -235,7 +235,7 @@ function goAllExclusively(operation) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (sender.id !== chrome.runtime.id || sender.url !== GO_ALL_POPUP_URL
-      || !message?.type?.startsWith('chatcmd-go-all-')) return false;
+      || typeof message?.type !== 'string' || !message.type.startsWith('chatcmd-go-all-')) return false;
   const reply = async () => {
     switch (message?.type) {
       case 'chatcmd-go-all-list': return await goAllSnapshot();
