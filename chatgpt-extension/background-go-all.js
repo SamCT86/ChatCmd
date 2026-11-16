@@ -161,6 +161,9 @@ async function runGoAll(rawSettings, retrySkipped = false, sourceBatchId) {
   if (retrySkipped && previous.batch?.id !== sourceBatchId) {
     throw new Error('Listan har ändrats. Uppdatera flikarna innan du fortsätter.');
   }
+  if (retrySkipped && previous.batch?.fingerprint !== fingerprint) {
+    throw new Error('GO-prompten har ändrats. Återställ den föregående prompten innan du startar återstående chattar.');
+  }
   const skipIds = retrySkipped
     ? new Set((previous.batch?.rows || []).filter((row) => GO_ALL_SKIPPED.has(row.status)).map((row) => row.id))
     : null;
