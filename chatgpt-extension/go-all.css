@@ -16,10 +16,6 @@ textarea {
   resize: vertical;
   font: inherit;
 }
-details { margin-bottom: 12px; }
-summary { cursor: pointer; }
-#link-form { display: flex; gap: 8px; margin-top: 6px; }
-#chat-link { min-width: 0; flex: 1; font: inherit; padding: 4px; }
 .section-heading, .actions {
   display: flex;
   gap: 10px;

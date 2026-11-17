@@ -7,9 +7,6 @@ const save = document.getElementById('save');
 const run = document.getElementById('run');
 const retry = document.getElementById('retry-skipped');
 const clear = document.getElementById('clear-uncertain');
-const linkForm = document.getElementById('link-form');
-const linkInput = document.getElementById('chat-link');
-const linkAdd = document.getElementById('link-add');
 
 const labels = {
   pending: 'Skickstatus okänd',
@@ -18,7 +15,7 @@ const labels = {
   closed: 'Fliken är stängd',
   draft: 'Skrivfältet har ett utkast eller en bilaga',
   approval: 'En dialog väntar på dig',
-  changed: 'Fliken bytte konversation eller projekt',
+  changed: 'Fliken bytte konversation',
   unavailable: 'Fliken är inte redo. Öppna eller ladda om den.',
   uncertain: 'Okänt om GO skickades. Kontrollera chatten.',
   review: 'Pausad tills du kontrollerat föregående skick',
@@ -31,12 +28,7 @@ const unavailableDetails = {
   bridge: 'Tillägget når inte fliken. Ladda om chatten.',
   composer: 'ChatGPTs skrivfält hittades inte. Öppna chatten och kontrollera att skrivfältet syns.',
   send_control: 'Skicka-knappen blev inte redo. Öppna chatten och kontrollera skrivfältet.',
-  timeout: 'Fliken svarade för långsamt. Försök igen när chatten har laddats.',
-  loading: 'Chatten hann inte ladda. Försök igen när den är klar.',
-  thread: 'Den sparade chatthistoriken kunde inte läsas. Kontrollera kontot eller lägg till hela chattlänken.',
-  open_failed: 'Edge kunde inte öppna chatten.',
-  ambiguous_target: 'Flera projektadresser hittades. Lägg till rätt chattlänk.',
-  target: 'Länken öppnade ett annat mål eller en inloggning. Kontrollera kontot och chattlänken.',
+  timeout: 'Fliken svarade för långsamt. Öppna den och försök igen.',
 };
 
 let tabs = [];
@@ -66,8 +58,6 @@ function updateActions() {
   retry.hidden = ![...retryableIds].some((id) => chosen.has(id));
   retry.disabled = run.disabled;
   clear.disabled = locked;
-  linkInput.disabled = locked;
-  linkAdd.disabled = locked;
   for (const control of chatList.querySelectorAll('input, button')) control.disabled = locked;
 }
 
@@ -82,37 +72,35 @@ function render() {
   for (const id of ids) {
     const tab = byId.get(id);
     const receipt = results.get(id);
-    const selected = chosen.get(id);
-    const title = tab?.title || selected?.title || receipt?.title || 'ChatGPT';
-    const url = selected?.url || tab?.url || receipt?.url;
-    const project = selected?.projectName || tab?.projectName;
-    const name = project && title.toLowerCase() !== project.toLowerCase() ? project + ' · ' + title : title;
+    const title = tab?.title || chosen.get(id)?.title || receipt?.title || 'ChatGPT';
     const item = document.createElement('li');
     const label = document.createElement('label');
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = chosen.has(id);
     checkbox.addEventListener('change', () => {
-      if (checkbox.checked) chosen.set(id, { id, title, url, projectName: project });
+      if (checkbox.checked) chosen.set(id, { id, title });
       else chosen.delete(id);
       updateActions();
     });
-    label.append(checkbox, document.createTextNode(name));
+    label.append(checkbox, document.createTextNode(title));
     const row = document.createElement('div');
     row.className = 'chat-row';
     row.append(label);
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.textContent = 'Öppna';
-    open.setAttribute('aria-label', 'Öppna ' + name);
-    open.addEventListener('click', () => void perform(() => request('focus', { id, url })));
-    row.append(open);
+    if (tab) {
+      const open = document.createElement('button');
+      open.type = 'button';
+      open.textContent = 'Öppna';
+      open.setAttribute('aria-label', 'Öppna ' + title);
+      open.addEventListener('click', () => void perform(() => request('focus', { id })));
+      row.append(open);
+    }
     item.append(row);
     const note = document.createElement('small');
     if (receipt?.status === 'pending' && running) note.textContent = 'Skickar…';
     else if (uncertainIds.has(id)) note.textContent = labels.uncertain;
-    else if (!tab && (!receipt || receipt.status === 'closed')) note.textContent = 'Stängd · öppnas vid GO';
     else if (receipt) note.textContent = unavailableDetails[receipt.detail] || labels[receipt.status];
+    else if (!tab) note.textContent = labels.closed;
     else if (tab.sleeping) note.textContent = 'Vilande flik';
     if (receipt?.status === 'sent') note.dataset.sent = 'true';
     if (note.textContent) item.append(note);
@@ -141,15 +129,9 @@ async function load({ restore = false } = {}) {
   uncertain = snapshot.uncertain;
   retryableIds = new Set(snapshot.retryableIds);
   running = snapshot.running;
-  const storedTargets = new Map(snapshot.settings.targets.map((target) => [target.id, target]));
   if (restore) {
     promptInput.value = snapshot.settings.prompt;
-    chosen = storedTargets;
-  } else {
-    for (const [id, target] of chosen) {
-      const stored = storedTargets.get(id);
-      if (!target.url && stored?.url) chosen.set(id, stored);
-    }
+    chosen = new Map(snapshot.settings.targets.map((target) => [target.id, target]));
   }
   render();
   showBatch();
@@ -167,18 +149,6 @@ async function perform(action) {
   }
 }
 
-linkForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const url = linkInput.value.trim();
-  void perform(async () => {
-    const { target } = await request('target', { url });
-    const existing = chosen.get(target.id) || tabs.find((tab) => tab.id === target.id);
-    chosen.set(target.id, { ...target, title: existing?.title || target.title });
-    linkInput.value = '';
-    render();
-    status.textContent = 'Chatten är vald. Spara val eller starta GO ALLA.';
-  });
-});
 promptInput.addEventListener('input', updateActions);
 refresh.addEventListener('click', () => void perform(load));
 save.addEventListener('click', () => void perform(async () => {

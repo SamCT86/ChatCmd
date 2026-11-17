@@ -33,8 +33,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!globalThis.ChatCmdRuntime.current(CONTENT_CONTEXT)) return false;
   if (message?.type === 'chatcmd-content-alive' && message.kind === 'chatgpt') { sendResponse({ ok: true, kind: 'chatgpt', captureProtocol: 2, compactProtocol: globalThis.ChatCmdCompact?.version, clockProtocol: globalThis.ChatCmdCaptureClock?.version, renderProtocol: globalThis.ChatCmdRenderBridge?.version, captureReady: Boolean(globalThis.ChatCmdCaptureClock && globalThis.ChatCmdObserver && globalThis.ChatCmdTranscript && globalThis.ChatCmdNativeCapture) }); return false; }
   if (message?.type === 'chatcmd-go-all-dispatch') {
-    if (typeof message.id !== 'string' || typeof message.path !== 'string'
-        || typeof message.prompt !== 'string' || !message.prompt.trim()
+    if (typeof message.id !== 'string' || typeof message.prompt !== 'string' || !message.prompt.trim()
         || !Number.isFinite(message.deadline)) {
       sendResponse({ status: 'unavailable' });
       return false;
@@ -80,10 +79,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       ok: true,
       ready: Boolean(composer) && !generating,
       composerReady: Boolean(composer),
-      goAllProtocol: 2,
+      goAllProtocol: 1,
       conversationId: currentConversationIdentity()?.conversationId,
-      conversationUrl: window.location.href,
-      threadReady: message.requireThread === true && Boolean(globalThis.ChatCmdTranscript?.hasUserTurn()),
       goAllBusy: Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
       generating,
     });
@@ -370,8 +367,6 @@ function setComposerText(composer, text) {
 const composerBridge = globalThis.ChatCmdComposerBridge.create({
   isCurrent: () => globalThis.ChatCmdRuntime.current(CONTENT_CONTEXT),
   conversationId: () => currentConversationIdentity()?.conversationId,
-  matchesPath: (path) => window.location.pathname.replace(/\/$/, '') === path
-    && new URLSearchParams(window.location.search).get('temporary-chat') !== 'true',
   hasActiveRequest: () => Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
   findComposer: (...args) => findComposer(...args),
   findSendButton: (...args) => findSendButton(...args),

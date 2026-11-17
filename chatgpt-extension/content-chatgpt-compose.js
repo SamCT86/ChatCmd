@@ -71,11 +71,10 @@ function create(deps) {
   // GO ALLA never retries a click whose outcome is uncertain.
   let oneShotBusy = false;
 
-  async function submitPromptOnce({ id, path, prompt, deadline }) {
+  async function submitPromptOnce({ id, prompt, deadline }) {
     if (oneShotBusy) return { status: 'busy' };
-    const matchesTarget = () => deps.isCurrent?.() && deps.conversationId?.() === id && deps.matchesPath?.(path);
     const blocked = () => {
-      if (!matchesTarget()) return 'changed';
+      if (!deps.isCurrent?.() || deps.conversationId?.() !== id) return 'changed';
       if (findStopButton() || deps.hasActiveRequest?.()) return 'busy';
       if (hasApprovalDialog()) return 'approval';
       if (Date.now() >= deadline) return 'unavailable';
@@ -123,7 +122,7 @@ function create(deps) {
       clicked = true;
       prepared.button.click();
       return await waitFor(() => {
-        if (!matchesTarget()) return { status: 'uncertain' };
+        if (!deps.isCurrent?.() || deps.conversationId?.() !== id) return { status: 'uncertain' };
         const messageId = lastUserMessageId();
         const currentComposer = findComposer();
         return messageId && messageId !== previousMessage
@@ -135,7 +134,7 @@ function create(deps) {
       return clicked ? { status: 'uncertain' } : { status: 'unavailable', detail: 'send_control' };
     } finally {
       try {
-        if (staged && !clicked && matchesTarget()
+        if (staged && !clicked && deps.isCurrent?.() && deps.conversationId?.() === id
             && findComposer() === composer && composerTextMatches(composer, prompt)) {
           setComposerText(composer, '');
         }
