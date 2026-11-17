@@ -12,8 +12,15 @@
     <h2>ChatGPT-chattar</h2>
     <button type="button" id="refresh">Uppdatera flikar</button>
   </div>
-  <p id="empty" hidden>Öppna dina befintliga ChatGPT-chattar i den här Edge-profilen och uppdatera listan.</p>
+  <p id="empty" hidden>Lägg till en chattlänk eller välj en chatt som är öppen i den här Edge-profilen.</p>
   <ul id="chats" aria-label="Valda och öppna chattar"></ul>
+  <details>
+    <summary>Lägg till chattlänk</summary>
+    <form id="link-form">
+      <input id="chat-link" type="url" aria-label="Länk till en befintlig ChatGPT-chatt" placeholder="https://chatgpt.com/…" required>
+      <button type="submit" id="link-add">Lägg till</button>
+    </form>
+  </details>
   <div class="actions">
     <button type="button" id="save">Spara val</button>
     <button type="button" id="retry-skipped" hidden>Starta återstående</button>

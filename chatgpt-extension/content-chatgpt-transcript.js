@@ -117,6 +117,7 @@
   }
   globalThis.ChatCmdTranscript = Object.freeze({
     latestUser, userText, readParts, normalize, conversationId,
+    hasUserTurn: () => Boolean(document.querySelector(USERS)),
     latestUserMessageId: () => latestUserMetadata()?.messageId || null,
   });
 })();
