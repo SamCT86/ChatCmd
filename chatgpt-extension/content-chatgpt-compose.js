@@ -154,13 +154,13 @@ function create(deps) {
 
   function isMainComposer(composer) {
     return Boolean(composer?.matches('#prompt-textarea, [data-testid="prompt-textarea"], textarea[name="prompt-textarea"]')
-      || composer?.closest('[data-type="unified-composer"], form[data-testid="composer-form"]'));
+      || composer?.closest('[data-composer-input], [data-type="unified-composer"], form[data-testid="composer-form"]'));
   }
 
   function hasInlineEdit() {
     const editors = document.querySelectorAll(
-      '[data-message-author-role="user"] textarea, [data-turn="user"] textarea,'
-      + ' [data-message-author-role="user"] [contenteditable="true"], [data-turn="user"] [contenteditable="true"]',
+      ':is([data-message-author-role="user"], [data-turn="user"], [data-content-search-unit-key$=":user"])'
+      + ' :is(textarea, [contenteditable="true"], [contenteditable="plaintext-only"])',
     );
     return [...editors].some((editor) => editor.getClientRects().length > 0);
   }
@@ -170,7 +170,8 @@ function create(deps) {
     const composerForm = composer.closest('form');
     const buttonForm = button.form || button.closest('form');
     if (composerForm && buttonForm) return composerForm === buttonForm;
-    return button.getAttribute('data-testid') === 'send-button';
+    if (button.getAttribute('data-testid') === 'send-button') return true;
+    return Boolean(composer.closest('[data-composer-input]') && deps.isNamedSendButton?.(button));
   }
 
   function hasDraftAttachment(composer) {

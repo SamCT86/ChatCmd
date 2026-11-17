@@ -82,17 +82,14 @@
     if (button) button.click();
   }
 
+  const sendLabels = ['Send prompt', 'Send message', 'Send', 'Gửi', 'Gửi tin nhắn',
+    'Skicka fråga', 'Skicka meddelande', 'Skicka'];
+  const sendSelectors = ['button[data-testid="send-button"]',
+    ...sendLabels.flatMap((label) => [`button[aria-label="${label}" i]`, `button[title="${label}" i]`])];
+  function isNamedSendButton(button) { return button.matches(sendSelectors.join(',')); }
+
   function findSendButton(composer) {
-    const selectors = [
-      'button[data-testid="send-button"]',
-      'button[aria-label="Send prompt"]',
-      'button[aria-label="Send message"]',
-      'button[aria-label="Send"]',
-      'button[aria-label="Gửi"]',
-      'button[aria-label="Gửi tin nhắn"]',
-      'button[title="Send"]',
-      'button[title="Gửi"]',
-    ];
+    const selectors = sendSelectors;
     const scopes = [];
     const form = composer?.closest?.('form');
     if (form) scopes.push(form);
@@ -101,9 +98,15 @@
       if (!scopes.includes(parent)) scopes.push(parent);
     }
     for (const scope of scopes) {
-      const button = findVisibleWithin(scope, [...selectors, 'button[type="submit"]']);
+      const button = findVisibleWithin(scope, selectors);
       if (button) return button;
+      if (scope === form) {
+        const submitButtons = [...form.querySelectorAll('button[type="submit"]')]
+          .filter((candidate) => isVisible(candidate) && candidate.form === form);
+        if (submitButtons.length === 1) return submitButtons[0];
+      }
     }
+    if (composer?.closest('[data-composer-input]')) return null;
     return findVisible(selectors);
   }
 
@@ -115,6 +118,7 @@
     findThreadError,
     findVisible,
     isVisible,
+    isNamedSendButton,
     latestMessageText,
     normalize,
   });

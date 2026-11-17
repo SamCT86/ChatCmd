@@ -222,6 +222,9 @@ async function waitForComposer() {
 
 function findComposer() {
   const direct = findUsableComposer(document, [
+    '[data-composer-input][contenteditable="true"], [data-composer-input] [contenteditable="true"]',
+    '[data-composer-input][contenteditable="plaintext-only"], [data-composer-input] [contenteditable="plaintext-only"]',
+    'textarea[data-composer-input], [data-composer-input] textarea',
     '#prompt-textarea',
     '[data-testid="prompt-textarea"]',
     'textarea[name="prompt-textarea"]',
@@ -367,6 +370,7 @@ const composerBridge = globalThis.ChatCmdComposerBridge.create({
   hasActiveRequest: () => Boolean(activeRequest || globalThis.ChatCmdCompact?.busy),
   findComposer: (...args) => findComposer(...args),
   findSendButton: (...args) => findSendButton(...args),
+  isNamedSendButton: (button) => globalThis.ChatCmdConversationDom.isNamedSendButton(button),
   findStopButton: (...args) => findStopButton(...args),
   setComposerText: (...args) => setComposerText(...args),
   waitFor: (...args) => waitFor(...args),

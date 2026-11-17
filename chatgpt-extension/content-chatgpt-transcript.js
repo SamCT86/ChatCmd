@@ -1,6 +1,6 @@
 // Read only ChatGPT's public rendered transcript. Never inspect private model/reasoning state.
 (() => {
-  const USERS = '[data-message-author-role="user"],[data-turn="user"],[data-chatgpt-search-unit-key$=":user"]';
+  const USERS = '[data-message-author-role="user"],[data-turn="user"],[data-chatgpt-search-unit-key$=":user"],[data-content-search-unit-key$=":user"]';
   const TURNS = '[data-testid^="conversation-turn"], [data-turn="assistant"], [data-chatgpt-search-unit-key$=":assistant"]';
   const EXCLUDED = 'button,svg,script,style,.sr-only,.visually-hidden,[hidden],[aria-hidden="true"],[role="alert"],'
     + '[data-chatcmd-ui],.chatcmd-return-button,.chatcmd-approval-panel,.clf-stream,.clf-stage,'
@@ -35,9 +35,13 @@
       .filter((node) => !node.parentElement?.closest(USERS));
     const node = users.at(-1);
     if (!node) return null;
+    const modernSelector = '[data-content-search-unit-key$=":user"]';
+    const modernTurn = node.matches(modernSelector) ? node : node.querySelector(modernSelector);
     const messageId = node.getAttribute('data-message-id') || node.querySelector('[data-message-id]')?.getAttribute('data-message-id')
-      || node.getAttribute('data-chatgpt-search-message-ids')?.split(/\s+/)[0] || null;
-    return { node, messageId, index: users.length - 1 };
+      || node.getAttribute('data-chatgpt-search-message-ids')?.split(/\s+/)[0]
+      || modernTurn?.getAttribute('data-content-search-message-ids')?.split(/\s+/)[0] || null;
+    const modernKey = modernTurn?.getAttribute('data-content-search-unit-key');
+    return { node, messageId: messageId || (modernKey ? 'search-unit:' + modernKey : null), index: users.length - 1 };
   }
   function latestUser() {
     const metadata = latestUserMetadata();
